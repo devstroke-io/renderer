@@ -10,6 +10,7 @@ export interface Result {
 export class Renderer {
   private readonly browser: Browser;
   private page: Page;
+  private url: string;
   private response: Response;
 
   constructor(browser: Browser) {
@@ -53,37 +54,22 @@ export class Renderer {
   }
 
   async init(requestUrl: string): Promise<Result> {
+    this.url = requestUrl;
     this.response = null;
     await this.preparePage();
-    this.page.addListener('response', (r) => {
-      if (!this.response) {
-        this.response = r;
-      }
-    });
-    await this.gotoUrl(requestUrl);
+    await this.gotoUrl();
 
     if (!this.response) {
       console.error('response does not exist');
-      // This should only occur when the page is about:blank. See
-      // https://github.com/GoogleChrome/puppeteer/blob/v1.5.0/docs/api.md#pagegotourl-options.
       return {status: 400, content: ''};
     }
 
-    // Disable access to compute metadata. See
-    // https://cloud.google.com/compute/docs/storing-retrieving-metadata.
     if (this.response.headers()['metadata-flavor'] === 'Google') {
       return {status: 403, content: ''};
     }
 
-    // Remove script & import tags.
-    await this.page.evaluate(Renderer.stripPage);
-    // Inject <base> tag with the origin of the request (ie. no path).
-    const parsedUrl: UrlWithStringQuery = url.parse(requestUrl);
-    await this.page.evaluate(Renderer.injectBaseHref, `${parsedUrl.protocol}//${parsedUrl.host}`);
-
-    const content: string = await this.page.evaluate(() => {
-      return (new XMLSerializer().serializeToString(document.doctype) + document.firstElementChild.outerHTML)
-    });
+    await this.cleanPage();
+    const content: string = await this.getContent();
     await this.page.close();
 
     return {
@@ -92,18 +78,37 @@ export class Renderer {
     };
   }
 
-  private async preparePage() {
+  private async getContent(): Promise<string> {
+    return await this.page.evaluate(() => {
+      return (new XMLSerializer().serializeToString(document.doctype) + document.firstElementChild.outerHTML)
+    });
+  }
+
+  private async preparePage(): Promise<void> {
     this.page = await this.browser.newPage();
     await this.page.setViewport({width: 375, height: 667, isMobile: true, hasTouch: true, deviceScaleFactor: 2});
     await this.page.evaluateOnNewDocument('customElements.forcePolyfill = true');
     await this.page.evaluateOnNewDocument('ShadyDOM = {force: true}');
     await this.page.evaluateOnNewDocument('ShadyCSS = {shimcssproperties: true}');
+    this.page.addListener('response', (r) => {
+      if (!this.response) {
+        this.response = r;
+      }
+    });
   }
 
-  private async gotoUrl(requestUrl) {
+  private async cleanPage(): Promise<void> {
+    // Remove script & import tags.
+    await this.page.evaluate(Renderer.stripPage);
+    // Inject <base> tag with the origin of the request (ie. no path).
+    const parsedUrl: UrlWithStringQuery = url.parse(this.url);
+    await this.page.evaluate(Renderer.injectBaseHref, `${parsedUrl.protocol}//${parsedUrl.host}`);
+  }
+
+  private async gotoUrl(): Promise<void> {
     try {
       // Navigate to page. Wait until there are no outstanding network requests.
-      this.response = await this.page.goto(requestUrl, {
+      this.response = await this.page.goto(this.url, {
         timeout: 10000, waitUntil: [
           'load',
           'domcontentloaded',
