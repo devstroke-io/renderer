@@ -54,12 +54,7 @@ export class Renderer {
 
   async init(requestUrl: string): Promise<Result> {
     this.response = null;
-    this.page = await this.browser.newPage();
-    await this.page.setViewport({width: 375, height: 667, isMobile: true, hasTouch: true, deviceScaleFactor: 2});
-    await this.page.evaluateOnNewDocument('customElements.forcePolyfill = true');
-    await this.page.evaluateOnNewDocument('ShadyDOM = {force: true}');
-
-    await this.page.evaluateOnNewDocument('ShadyCSS = {shimcssproperties: true}');
+    await this.preparePage();
     this.page.addListener('response', (r) => {
       if (!this.response) {
         this.response = r;
@@ -95,6 +90,14 @@ export class Renderer {
       status: this.response.status() === 304 ? 200 : this.response.status(),
       content
     };
+  }
+
+  private async preparePage() {
+    this.page = await this.browser.newPage();
+    await this.page.setViewport({width: 375, height: 667, isMobile: true, hasTouch: true, deviceScaleFactor: 2});
+    await this.page.evaluateOnNewDocument('customElements.forcePolyfill = true');
+    await this.page.evaluateOnNewDocument('ShadyDOM = {force: true}');
+    await this.page.evaluateOnNewDocument('ShadyCSS = {shimcssproperties: true}');
   }
 
   private async gotoUrl(requestUrl) {
