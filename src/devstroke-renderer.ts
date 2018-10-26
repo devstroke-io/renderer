@@ -52,4 +52,8 @@ class DevstrokeRenderer {
 }
 
 const app = new DevstrokeRenderer(3000);
-app.initialize();
+app.initialize().then(() => {
+  console.log('DevstrokeRendered initialized');
+}, (e) => {
+  console.error('DevstrokeRendered initialization error', e);
+});
