@@ -10,7 +10,7 @@ jobs:
     if: tag IS present
     script:
     - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-    - docker build --target prod-stage -t devstroke/www:$TRAVIS_TAG -f docker/Dockerfile .
+    - docker build --target prod-stage -t devstroke/renderer:$TRAVIS_TAG -f docker/Dockerfile .
     - docker tag devstroke/renderer:$TRAVIS_TAG devstroke/renderer:latest
     - docker push devstroke/renderer:$TRAVIS_TAG
     - docker push devstroke/renderer:latest
