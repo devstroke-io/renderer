@@ -7,6 +7,43 @@ export interface Result {
   content: string;
 }
 
+
+/**
+ * Injects a <base> tag which allows other resources to load. This
+ * has no effect on serialised output, but allows it to verify render
+ * quality.
+ */
+const injectBaseHref = (origin: string): void => {
+  const base = document.createElement('base');
+  base.setAttribute('href', origin);
+
+  const bases = document.head.querySelectorAll('base');
+  if (!bases.length) {
+    // Only inject <base> if it doesn't already exist.
+    document.head.insertAdjacentElement('afterbegin', base);
+    return;
+  }
+// Patch existing <base> if it is relative.
+  const existingBase = bases[0].getAttribute('href') || '';
+  if (existingBase.startsWith('/')) {
+    bases[0].setAttribute('href', origin + existingBase);
+  }
+};
+
+/**
+ * Executed on the page after the page has loaded. Strips script and
+ * import tags to prevent further loading of resources.
+ */
+const stripPage = (): void => {
+  // Strip only script tags that contain JavaScript (either no type attribute or one that contains "javascript")
+  const elements = document.querySelectorAll(
+    'script:not([type]), script[type*="javascript"], link[rel=import]'
+  );
+  for (const e of Array.from(elements)) {
+    e.remove();
+  }
+};
+
 export class Renderer {
   private readonly browser: Browser;
   private page: Page;
@@ -15,42 +52,6 @@ export class Renderer {
 
   constructor(browser: Browser) {
     this.browser = browser;
-  }
-
-  /**
-   * Injects a <base> tag which allows other resources to load. This
-   * has no effect on serialised output, but allows it to verify render
-   * quality.
-   */
-  private static injectBaseHref(origin: string): void {
-    const base = document.createElement('base');
-    base.setAttribute('href', origin);
-
-    const bases = document.head.querySelectorAll('base');
-    if (!bases.length) {
-      // Only inject <base> if it doesn't already exist.
-      document.head.insertAdjacentElement('afterbegin', base);
-      return;
-    }
-    // Patch existing <base> if it is relative.
-    const existingBase = bases[0].getAttribute('href') || '';
-    if (existingBase.startsWith('/')) {
-      bases[0].setAttribute('href', origin + existingBase);
-    }
-  }
-
-  /**
-   * Executed on the page after the page has loaded. Strips script and
-   * import tags to prevent further loading of resources.
-   */
-  private static stripPage(): void {
-    // Strip only script tags that contain JavaScript (either no type attribute or one that contains "javascript")
-    const elements = document.querySelectorAll(
-      'script:not([type]), script[type*="javascript"], link[rel=import]'
-    );
-    for (const e of Array.from(elements)) {
-      e.remove();
-    }
   }
 
   async init(requestUrl: string): Promise<Result> {
@@ -99,10 +100,10 @@ export class Renderer {
 
   private async cleanPage(): Promise<void> {
     // Remove script & import tags.
-    await this.page.evaluate(Renderer.stripPage);
+    await this.page.evaluate(stripPage);
     // Inject <base> tag with the origin of the request (ie. no path).
     const parsedUrl: UrlWithStringQuery = url.parse(this.url);
-    await this.page.evaluate(Renderer.injectBaseHref, `${parsedUrl.protocol}//${parsedUrl.host}`);
+    await this.page.evaluate(injectBaseHref, `${parsedUrl.protocol}//${parsedUrl.host}`);
   }
 
   private async gotoUrl(): Promise<void> {
